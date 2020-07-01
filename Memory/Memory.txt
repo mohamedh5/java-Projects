@@ -1,0 +1,204 @@
+******************************************************   Memory Management   ******************************************************
+
+Java Virtual Machine (JVM): is the spesification of how to manage and run java compiled code (byteCode) 
+"It is the component of the technology responsible for its hardware- and operating system-independence, the small size of its compiled code, and its ability to protect users from malicious programs."
+
+Java Runtime Environment (JRE): it's the implementation of the JVM, There's different. 
+
+Both will me described in more details in another module.
+
+Memory Types in JVM also called runtime data area: 1- Heap 2- Stack 3- Non-Heap (Method Area)
+
+**************************************************************** WILL ADD METASPACE AND PERM GEN AND PC REGISTER LATER ***********************************************************************************
+
+*****************Important: it depends on which implementation of the Java Virtual Machine we are using, The answer is for (JRockit JVM) will try to add some notes for HotSpot.*********
+
+Heap (dynamic memory allocation):
+
+1- What can be stored in Heap?
+	- All classes instances (Objects)
+	- Arrays
+	- JRE Classes
+
+2- When the heap memory is created? and how can access objects stored in it?
+	The heap is created on virtual machine start-up, object's in the heap can be accessed from anywhere in the application.
+
+3- What is the initial size of the heap? can we change it?
+	The size of the heap depends on which mode we are running (client or server), this is the initial and minimum size of heap.
+		-server mode: 25% of the amount of free physical memory in the system, up to 64 MB and at least 8 MB
+		-client mode: 25% of the amount of free physical memory in the system, up to 16 MB and at least 8 MB
+		
+	HotSpot : Initial heap size of 1/64 of physical memory 
+	
+	Yes we can change the size of heap using this two options.
+		-Xms<size>[g|G|m|M|k|K]        set initial (minimum) Java heap size
+		-Xmx<size>[g|G|m|M|k|K]        set maximum Java heap size
+	
+	Examples:
+		java -Xms:64m myApp -> sets the initial and minimum java heap to 64 MB.
+		java -Xmx:1g myApp  -> sets the maximum java heap to 1 gigabyte.
+	
+	Notes:
+		- If you do not add a unit, you will get the exact value you state; for example, 64 will be interpreted as 64 bytes, not 64 megabytes or 64 kilobytes.
+		- If the nursery size is set with -Xns, the default initial heap size will be scaled up to at least twice the nursery size.
+		- The initial Java heap cannot be set to a smaller value than 8 MB
+		- If both -Xmx and -Xms are specified the value of -Xmx must be larger than or equal to that of -Xms.
+		- If both -Xmx and -Xns are specified the value of -Xmx must be larger than or equal to that of -Xns.
+		- The minimum value for -Xmx is 16 MB.
+		- A heap that is larger than the available physical memory in the system must be paged out to disk, which leads to long access times or even application freezes, especially during garbage collection.
+		- The default maximum Heap size: (in JRockit The isn't a maximum as the document says if we specified a size greater than the physical memory it'll page out to the disk).
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| Release         | Platform                              | Default Maximum Heap Size                   |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R27.2 and older | Windows                               | 75% of total physical memory up to 1 GB     |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R27.2 and older | Linux, Solaris                        | 50% of available physical memory up to 1 GB |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R27.3 and newer | Windows on a 64 bit platform          | 75% of total physical memory up to 2 GB     |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R27.3 and newer | Linux or Solaris on a 64 bit platform | 50% of available physical memory up to 2 GB |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R72.3 and newer | Windows on a 32 bit platform          | 75% of total physical memory up to 1 GB     |
+				+-----------------+---------------------------------------+---------------------------------------------+
+				| R27.3 and newer | Linux on a 32 bit platform            | 50% of available physical memory up to 1 GB |
+				+-----------------+---------------------------------------+---------------------------------------------+
+		- The Maximum heap size for (HotSpot): 1/4 of physical memory 
+	
+	Exceptions:
+		java -Xms8 Application -> 8 bytes which is less then 8 MB 
+			Error occurred during initialization of VM
+			Too small initial heap
+		java -Xmx8 Application  -> 8 byte max value
+			Error occurred during initialization of VM
+			Too small maximum heap
+		java -Xmx8m -Xms10m Application -> set minimum to 10MB and max to 8 MB
+			Error occurred during initialization of VM
+			Initial heap size set to a larger value than the maximum heap size
+		java -Xmx6m Application -> this works although Oracle doc says "minimum value for -Xmx is 16 MB" but maybe it worked because the java class was too simple!!!!.
+			Hello
+			
+4- what is the heap structure?
+	The Heap is divided into two areas (generations): young generation (nursery),old generation (tenured).
+	Nursery: consists of eden and two survivor spaces. Most objects are initially allocated in eden. One survivor space is empty at any time, 
+			and serves as the destination of any live objects in eden; the other survivor space is the destination during the next copying collection.
+			Objects are copied between survivor spaces in this way until they are old enough to be tenured (copied to the tenured generation).
+	Tenured: contains the objects that are long-lived and survived after many rounds of Minor GC.
+	
+	
+	Notes:  
+		- he reasoning behind a nursery is that most objects are temporary and short lived. A young collection is designed to be swift at finding newly allocated objects that are still alive and moving them away from the nursery.
+		Typically, a young collection frees a given amount of memory much faster than an old collection or a garbage collection of a single-generational heap (a heap without a nursery).
+	+------+----------+----------+---------+---------+---------+
+	| Eden | Survivor | Survivor | Virtual | tenured | virtual |
+	+------+----------+----------+---------+---------+---------+
+	|                 Young                |        old        |
+	+--------------------------------------+-------------------+
+		At initialization, a maximum address space is virtually reserved but not allocated to physical memory unless it is needed. 
+	
+5- can we control the Generations size?
+	yes we can, here is the option we can use:
+		+---------------+----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+		| Parameter     | Description                                  | Example                                                                                                                     |
+		+===============+==============================================+=============================================================================================================================+
+		| NewRatio      | control the young generation Size            | -XX:NewRatio=3                                                                                                             |
+		|               | (the ratio of old generation to young        | conmeans that the ratio between the young and tenured generation is 1:3. In other words,                                    |
+		|               | generation)                                  | the combined size of the Eden and survivor spaces will be one-fourth of the total heap size.                                |
+		|               |                                              | When the heap grows or shrinks, the JVM must recalculate the old and new generation sizes to maintain a predefined NewRatio |
+		+---------------+----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+		| NewSize       | control the young generation’s minimum size  | -XX:NewSize =512k                                                                                                           |
+		|               |                                              | It will set initial value of Permanent Space as 512 kilobytes to JVM                                                        |
+		+---------------+----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+		| MaxNewSize    | control the young generation’s maximum size  | -XX:MaxNewSize =512m                                                                                                        |
+		|               |                                              | It will set initial value of Permanent Space as 512 megabytes to JVM                                                        |
+		+---------------+----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+		| SurvivorRatio | used to tune the size of the survivor spaces | -XX:SurvivorRatio=6                                                                                                         |
+		|               |                                              | sets the ratio between eden and a survivor space to 1:6. In other words,                                                    |
+		|               |                                              | each survivor space will be one-sixth the size of eden, and thus one-eighth the size of the young generation                |
+		|               |                                              | (not one-seventh, because there are two survivor spaces).                                                                   |
+		+---------------+----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+			
+
+
+Stack (static memory allocation):
+
+1- what is stack? What can be stored in stack?
+	The stack is used for the execution of a thread, access to stack is in Last-In-First-Out (LIFO) order. 
+	Whenever a new method is called, a new block on top of the stack is created which contains values specific to that method. 
+	When the method finishes execution, it’s corresponding stack frame is flushed, the flow goes back to the calling method and space becomes available for the next method.
+	it contains:
+		- primitive values that are specific to a method
+		- references to objects that are in a heap
+		
+2- When the Stack memory is created? and how can access objects stored in it?
+	Each Java Virtual Machine thread has a private Java Virtual Machine stack, created at the same time as the thread.
+
+3- what is the size of the stack? can we change it?
+	Default stack size (HotSpot):
+		Linux/x64 (64-bit): 1024 KB
+		macOS (64-bit): 1024 KB
+		Oracle Solaris (64-bit): 1024 KB
+		Windows: The default value depends on virtual memory
+		JRockit:
+			+----------------+----------------+
+			| Platform       | Default        |
+			+================+================+
+			| Windows IA32   | 64 KB          |
+			+----------------+----------------+
+			| Linux IA32     | 128 KB         |
+			+----------------+----------------+
+			| Windows x86_64 | 128 KB         |
+			+----------------+----------------+
+			| Linux x86_64   | 256 KB         |
+			+----------------+----------------+
+			| Windows IA64   | 320 KB         |
+			+----------------+----------------+
+			| Linux IA64     | 1024 KB (1 MB) |
+			+----------------+----------------+
+			| Solaris Sparc  | 512 KB         |
+			+----------------+----------------+
+	
+	Yes we can change it, by using this option:
+		-Xss<size>[g|G|m|M|k|K]		set java thread stack size.
+	Example:
+		java -Xss4m Application -> set the stack size to 4 megabytes
+		
+		java -Xss4 Application  -> set the stack size to 4 bytes
+			The Java thread stack size specified is too small. Specify at least 180k
+			Error: Could not create the Java Virtual Machine.
+			Error: A fatal exception has occurred. Program will exit.
+			
+		
+	Notes:
+		- If you do not add a unit, you will get the exact value you state; for example, 64 will be 64 bytes, not 64 megabytes or 64 kilobytes
+	
+4- what exception can be thrown related to stack?
+	- If the computation in a thread requires a larger Java Virtual Machine stack than is permitted, the Java Virtual Machine throws a StackOverflowError.
+
+	- If Java Virtual Machine stacks can be dynamically expanded, and expansion is attempted but insufficient memory can be made available to effect the expansion, 
+		or if insufficient memory can be made available to create the initial Java Virtual Machine stack for a new thread, the Java Virtual Machine throws an OutOfMemoryError.
+
+
+Method Area:
+
+1- what is Method Area?
+	The method area is analogous to the storage area for compiled code of a conventional language or analogous to the "text" segment in an operating system process.
+	It stores per-class structures such as the run-time constant pool, field and method data, and the code for methods and constructors.
+	
+2- When the Method Area is created? and where?
+	he method area is created on virtual machine start-up. Although the method area is logically part of the heap, simple implementations may choose not to either garbage collect or compact it.
+
+4- what exception can be thrown related to Method Area?
+	- If memory in the method area cannot be made available to satisfy an allocation request, the Java Virtual Machine throws an OutOfMemoryError.
+
+References:
+	https://docs.oracle.com/javase/specs/jvms/se14/html/jvms-2.html
+	https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/jrdocs/refman/optionX.html#wp999527
+	https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/geninfo/diagnos/memman.html
+	https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/geninfo/diagnos/garbage_collect.html
+	https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/generations.html
+	https://docs.oracle.com/en/java/javase/14/docs/specs/man/java.html
+	https://docs.oracle.com/en/java/javase/14/gctuning/ergonomics.html
+	https://docs.oracle.com/en/java/javase/11/jrockit-hotspot/preface.html **
+	https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/considerations.html *** metaspace ***
+	https://www.yourkit.com/docs/kb/sizes.jsp
+	https://www.journaldev.com/2856/java-jvm-memory-model-memory-management-in-java#java-garbage-collection-tuning
